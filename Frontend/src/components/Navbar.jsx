@@ -1,0 +1,421 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
+import {
+    Search,
+    ShoppingBag,
+    User,
+    Bell,
+    Heart,
+    MapPin,
+    Sun,
+    Moon,
+    LogOut,
+    LayoutDashboard,
+    Package,
+    Flame,
+    CheckCheck,
+    Menu,
+    X,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import api from "../services/api";
+import { connectSocket, disconnectSocket } from "../services/socket";
+import { clearCredentials, updateUserState } from "../store/authSlice";
+import {
+    setNotifications,
+    pushNotification,
+    markAllReadLocal,
+    toggleTheme,
+} from "../store/store";
+
+const Navbar = () => {
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const { user, isAuthenticated, restaurant, deliveryPartner } = useSelector(
+        (state) => state.auth
+    );
+    const { items: cartItems } = useSelector((state) => state.cart);
+    const { items: notifications, unreadCount } = useSelector(
+        (state) => state.notifications
+    );
+    const { mode: themeMode } = useSelector((state) => state.theme);
+
+    const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const notifRef = useRef(null);
+
+    const totalCartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Fetch notifications and initialize Socket.IO real-time listener (Task 5)
+    useEffect(() => {
+        if (!isAuthenticated || !user?._id) return;
+
+        api.get("/notifications")
+            .then((res) => {
+                if (res.data?.data) {
+                    dispatch(setNotifications(res.data.data));
+                }
+            })
+            .catch(() => { });
+
+        const socket = connectSocket(user, { restaurant, deliveryPartner });
+
+        const handleNewNotification = (payload) => {
+            dispatch(pushNotification(payload));
+            if (payload?.notification?.title) {
+                toast.success(`${payload.notification.title}: ${payload.notification.message}`, {
+                    duration: 4500,
+                });
+            }
+        };
+
+        const handleFraudAlert = (alert) => {
+            if (user?.role === "admin") {
+                toast.error(
+                    `FRAUD ALERT: Order #${alert.orderNumber} flagged (${alert.riskLevel} Risk: ${alert.riskScore})`,
+                    { duration: 6000 }
+                );
+            }
+        };
+
+        socket.on("notification:new", handleNewNotification);
+        socket.on("admin:fraud_alert", handleFraudAlert);
+
+        return () => {
+            socket.off("notification:new", handleNewNotification);
+            socket.off("admin:fraud_alert", handleFraudAlert);
+        };
+    }, [isAuthenticated, user?._id, user?.role, restaurant, deliveryPartner, dispatch]);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (notifRef.current && !notifRef.current.contains(e.target)) {
+                setShowNotifDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleMarkAllRead = async () => {
+        try {
+            await api.patch("/notifications/read-all");
+            dispatch(markAllReadLocal());
+        } catch {
+            dispatch(markAllReadLocal());
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await api.post("/auth/logout");
+        } catch {
+            // ignore
+        }
+        disconnectSocket();
+        dispatch(clearCredentials());
+        toast.success("Logged out successfully");
+        navigate("/login");
+    };
+
+    const getDashboardLink = () => {
+        if (!user) return null;
+        if (user.role === "admin")
+            return { to: "/admin", label: "Admin Console" };
+        if (user.role === "restaurant")
+            return { to: "/restaurant-dashboard", label: "Restaurant Hub" };
+        if (user.role === "delivery")
+            return { to: "/delivery-dashboard", label: "Rider Portal" };
+        return null;
+    };
+
+    const dashboardInfo = getDashboardLink();
+
+    return (
+        <header className="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+                {/* Brand Logo & Location Selector */}
+                <div className="flex items-center gap-6">
+                    <Link to="/" className="flex items-center gap-2.5 group">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white shadow-md shadow-orange-500/25 group-hover:scale-105 transition-transform">
+                            <Flame className="w-6 h-6 fill-white" />
+                        </div>
+                        <div>
+                            <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                                Zing<span className="text-orange-500">Bite</span>
+                            </span>
+                            <span className="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-1">
+                                Express Delivery
+                            </span>
+                        </div>
+                    </Link>
+
+                    <Link
+                        to="/restaurants"
+                        className="hidden md:flex items-center gap-2 pl-4 border-l border-slate-200 dark:border-slate-800 text-sm hover:text-orange-500 transition-colors"
+                    >
+                        <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
+                        <div className="truncate max-w-[200px]">
+                            <span className="font-bold text-slate-800 dark:text-slate-100 border-b-2 border-orange-500 pb-0.5">
+                                {user?.savedAddresses?.[0]?.label || "Indiranagar"}
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400 text-xs ml-1.5">
+                                {user?.savedAddresses?.[0]?.street || "Bengaluru, Karnataka"}
+                            </span>
+                        </div>
+                    </Link>
+                </div>
+
+                {/* Desktop Navigation Links */}
+                <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <Link
+                        to="/search"
+                        className={`flex items-center gap-2 hover:text-orange-500 transition-colors ${location.pathname === "/search" ? "text-orange-500" : ""
+                            }`}
+                    >
+                        <Search className="w-4 h-4" />
+                        <span>Search</span>
+                    </Link>
+
+                    <Link
+                        to="/restaurants"
+                        className={`hover:text-orange-500 transition-colors ${location.pathname === "/restaurants" ? "text-orange-500" : ""
+                            }`}
+                    >
+                        Restaurants
+                    </Link>
+
+                    {isAuthenticated && (
+                        <>
+                            <Link
+                                to="/my-orders"
+                                className={`flex items-center gap-1.5 hover:text-orange-500 transition-colors ${location.pathname === "/my-orders" ? "text-orange-500" : ""
+                                    }`}
+                            >
+                                <Package className="w-4 h-4" />
+                                <span>Orders</span>
+                            </Link>
+
+                            <Link
+                                to="/wishlist"
+                                className={`flex items-center gap-1.5 hover:text-orange-500 transition-colors ${location.pathname === "/wishlist" ? "text-orange-500" : ""
+                                    }`}
+                            >
+                                <Heart className="w-4 h-4" />
+                                <span>Wishlist</span>
+                            </Link>
+                        </>
+                    )}
+
+                    {dashboardInfo && (
+                        <Link
+                            to={dashboardInfo.to}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/60 hover:bg-orange-100 transition-colors"
+                        >
+                            <LayoutDashboard className="w-4 h-4" />
+                            <span>{dashboardInfo.label}</span>
+                        </Link>
+                    )}
+                </nav>
+
+                {/* Right Action Icons */}
+                <div className="flex items-center gap-3">
+                    {/* Theme Toggle */}
+                    <button
+                        onClick={() => dispatch(toggleTheme())}
+                        title="Toggle Light / Dark Mode"
+                        className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-orange-50 hover:text-orange-500 transition-colors cursor-pointer"
+                    >
+                        {themeMode === "dark" ? (
+                            <Sun className="w-5 h-5 text-amber-400" />
+                        ) : (
+                            <Moon className="w-5 h-5" />
+                        )}
+                    </button>
+
+                    {/* Live Notifications Dropdown */}
+                    {isAuthenticated && (
+                        <div className="relative" ref={notifRef}>
+                            <button
+                                onClick={() => setShowNotifDropdown((prev) => !prev)}
+                                className="relative p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-orange-50 hover:text-orange-500 transition-colors cursor-pointer"
+                            >
+                                <Bell className="w-5 h-5" />
+                                {unreadCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-500 text-white text-[11px] font-bold flex items-center justify-center animate-pulse">
+                                        {unreadCount > 9 ? "9+" : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+
+                            {showNotifDropdown && (
+                                <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50">
+                                    <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                        <div>
+                                            <h4 className="font-bold text-sm">Live Notifications</h4>
+                                            <p className="text-xs text-slate-500">
+                                                Real-time Socket.IO updates
+                                            </p>
+                                        </div>
+                                        {unreadCount > 0 && (
+                                            <button
+                                                onClick={handleMarkAllRead}
+                                                className="text-xs font-semibold text-orange-500 hover:text-orange-600 flex items-center gap-1 cursor-pointer"
+                                            >
+                                                <CheckCheck className="w-3.5 h-3.5" />
+                                                Mark all read
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                                        {notifications.length === 0 ? (
+                                            <div className="p-6 text-center text-sm text-slate-500">
+                                                No notifications yet
+                                            </div>
+                                        ) : (
+                                            notifications.slice(0, 12).map((n) => (
+                                                <div
+                                                    key={n._id}
+                                                    onClick={() => {
+                                                        setShowNotifDropdown(false);
+                                                        if (n.order?._id || n.order) {
+                                                            navigate(`/orders/${n.order._id || n.order}`);
+                                                        }
+                                                    }}
+                                                    className={`p-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${!n.isRead
+                                                            ? "bg-orange-50/40 dark:bg-orange-950/20"
+                                                            : ""
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="font-semibold text-xs text-slate-900 dark:text-slate-100">
+                                                            {n.title}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-400">
+                                                            {new Date(n.createdAt).toLocaleTimeString([], {
+                                                                hour: "2-digit",
+                                                                minute: "2-digit",
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+                                                        {n.message}
+                                                    </p>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Cart Button */}
+                    <Link
+                        to="/cart"
+                        className="relative flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 dark:bg-orange-500 text-white font-semibold text-sm hover:bg-orange-500 dark:hover:bg-orange-600 transition-colors shadow-xs"
+                    >
+                        <ShoppingBag className="w-4 h-4" />
+                        <span className="hidden sm:inline">Cart</span>
+                        {totalCartQuantity > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full bg-orange-500 dark:bg-slate-950 text-white text-xs font-bold">
+                                {totalCartQuantity}
+                            </span>
+                        )}
+                    </Link>
+
+                    {/* User Profile / Auth */}
+                    {isAuthenticated ? (
+                        <div className="flex items-center gap-2">
+                            <Link
+                                to="/profile"
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-orange-500 transition-colors"
+                            >
+                                <User className="w-4 h-4 text-orange-500" />
+                                <span className="hidden sm:inline text-sm font-semibold truncate max-w-[100px]">
+                                    {user?.name?.split(" ")[0]}
+                                </span>
+                            </Link>
+                            <button
+                                onClick={handleLogout}
+                                title="Logout"
+                                className="p-2.5 rounded-xl text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <Link
+                            to="/login"
+                            className="px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm transition-colors shadow-sm shadow-orange-500/20"
+                        >
+                            Sign In
+                        </Link>
+                    )}
+
+                    {/* Mobile Hamburger */}
+                    <button
+                        onClick={() => setMobileMenuOpen((p) => !p)}
+                        className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800"
+                    >
+                        {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                    </button>
+                </div>
+            </div>
+
+            {/* Mobile Dropdown Menu */}
+            {mobileMenuOpen && (
+                <div className="lg:hidden px-4 pb-4 pt-2 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-2 text-sm font-semibold">
+                    <Link
+                        to="/search"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="py-2 hover:text-orange-500"
+                    >
+                        Search Restaurants & Dishes
+                    </Link>
+                    <Link
+                        to="/restaurants"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="py-2 hover:text-orange-500"
+                    >
+                        All Restaurants
+                    </Link>
+                    {isAuthenticated && (
+                        <>
+                            <Link
+                                to="/my-orders"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-2 hover:text-orange-500"
+                            >
+                                My Orders
+                            </Link>
+                            <Link
+                                to="/wishlist"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="py-2 hover:text-orange-500"
+                            >
+                                My Wishlist
+                            </Link>
+                        </>
+                    )}
+                    {dashboardInfo && (
+                        <Link
+                            to={dashboardInfo.to}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="py-2 text-orange-500 font-bold"
+                        >
+                            {dashboardInfo.label}
+                        </Link>
+                    )}
+                </div>
+            )}
+        </header>
+    );
+};
+
+export default Navbar;
+
