@@ -251,7 +251,7 @@ const HomePage = () => {
                     <div className="flex items-center justify-between mb-6">
                         <div>
                             <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
-                                {user ? `${user.name.split(" ")[0]}, what's on your mind?` : "What's on your mind?"}
+                                {user ? `Order our best food options` : "Order our best food options"}
                             </h2>
                             <p className="text-sm text-slate-500 dark:text-slate-400">
                                 Explore curated cuisines from top kitchens
