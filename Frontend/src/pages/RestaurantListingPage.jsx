@@ -3,6 +3,25 @@ import { SlidersHorizontal, Star, Clock, Leaf, RotateCcw } from "lucide-react";
 import api from "../services/api";
 import RestaurantCard from "../components/RestaurantCard";
 
+const TOP_RESTAURANT_CHAIN_IMAGES = {
+    "Meghana Royal Biryani House":
+        "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1000&auto=format&fit=crop&q=80",
+    "Vidyarthi Heritage Tiffins":
+        "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&auto=format&fit=crop&q=80",
+    "Truffles Gourmet Burgers & Bistro":
+        "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1000&auto=format&fit=crop&q=80",
+    "Napoli Wood-Fired Pizzeria":
+        "https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=1000&auto=format&fit=crop&q=80",
+    "Mainland Wok & Dimsum Studio":
+        "https://images.unsplash.com/photo-1552566626-52f8b828add9?w=1000&auto=format&fit=crop&q=80",
+    "Punjab Grill & Tandoor Dhaba":
+        "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1000&auto=format&fit=crop&q=80",
+    "Belgian Waffle & Gelato Factory":
+        "https://images.unsplash.com/photo-1525610553991-2bede1a236e2?w=1000&auto=format&fit=crop&q=80",
+    "GreenCraft Poke & Protein Bowls":
+        "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=1000&auto=format&fit=crop&q=80",
+};
+
 const CUISINES = [
     "All",
     "Biryani",
@@ -39,8 +58,14 @@ const RestaurantListingPage = () => {
                 if (filters.vegetarian) params.set("vegetarian", "true");
                 if (filters.sortBy) params.set("sortBy", filters.sortBy);
 
+                params.set("limit", "50");
+
                 const res = await api.get(`/restaurants/search?${params.toString()}`);
-                setRestaurants(res.data?.data?.restaurants || []);
+                const list = (res.data?.data?.restaurants || []).map((rest) => ({
+                    ...rest,
+                    bannerImage: TOP_RESTAURANT_CHAIN_IMAGES[rest.name] || rest.bannerImage,
+                }));
+                setRestaurants(list);
             } catch {
                 setRestaurants([]);
             } finally {
@@ -123,7 +148,7 @@ const RestaurantListingPage = () => {
                                 }`}
                         >
                             <Clock className="w-3.5 h-3.5 text-orange-500" />
-                            <span>Fast Delivery (&le; 25 mins)</span>
+                            <span>Fast Delivery</span>
                         </button>
 
                         <button

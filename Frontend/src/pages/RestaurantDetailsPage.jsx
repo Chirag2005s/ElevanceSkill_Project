@@ -17,10 +17,31 @@ import {
     UtensilsCrossed,
     CheckCircle2,
     Tag,
+    Store,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../services/api";
 import { addToCart, updateItemQuantity } from "../store/cartSlice";
+import RestaurantCard from "../components/RestaurantCard";
+
+const TOP_RESTAURANT_CHAIN_IMAGES = {
+    "Meghana Royal Biryani House":
+        "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1000&auto=format&fit=crop&q=80",
+    "Vidyarthi Heritage Tiffins":
+        "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&auto=format&fit=crop&q=80",
+    "Truffles Gourmet Burgers & Bistro":
+        "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1000&auto=format&fit=crop&q=80",
+    "Napoli Wood-Fired Pizzeria":
+        "https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=1000&auto=format&fit=crop&q=80",
+    "Mainland Wok & Dimsum Studio":
+        "https://images.unsplash.com/photo-1552566626-52f8b828add9?w=1000&auto=format&fit=crop&q=80",
+    "Punjab Grill & Tandoor Dhaba":
+        "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1000&auto=format&fit=crop&q=80",
+    "Belgian Waffle & Gelato Factory":
+        "https://images.unsplash.com/photo-1525610553991-2bede1a236e2?w=1000&auto=format&fit=crop&q=80",
+    "GreenCraft Poke & Protein Bowls":
+        "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=1000&auto=format&fit=crop&q=80",
+};
 
 const DEFAULT_FALLBACK_MENU = [
     {
@@ -119,6 +140,7 @@ const RestaurantDetailsPage = () => {
     const { user, isAuthenticated } = useSelector((state) => state.auth);
 
     const [restaurant, setRestaurant] = useState(null);
+    const [allRestaurants, setAllRestaurants] = useState([]);
     const [foods, setFoods] = useState([]);
     const [reviews, setReviews] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -162,12 +184,27 @@ const RestaurantDetailsPage = () => {
         const fetchDetails = async () => {
             setLoading(true);
             try {
-                const res = await api.get(`/restaurants/${id}`);
+                const [res, allRes] = await Promise.all([
+                    api.get(`/restaurants/${id}`),
+                    api.get("/restaurants?limit=50&sortBy=popularity"),
+                ]);
                 if (res.data?.data) {
-                    setRestaurant(res.data.data.restaurant);
+                    const restObj = res.data.data.restaurant;
+                    setRestaurant({
+                        ...restObj,
+                        bannerImage:
+                            TOP_RESTAURANT_CHAIN_IMAGES[restObj?.name] || restObj?.bannerImage,
+                    });
                     const fetchedFoods = res.data.data.foods || [];
                     setFoods(fetchedFoods.length > 0 ? fetchedFoods : DEFAULT_FALLBACK_MENU);
                     setReviews(res.data.data.reviews || []);
+                }
+                if (allRes.data?.data?.restaurants) {
+                    const mappedAll = allRes.data.data.restaurants.map((r) => ({
+                        ...r,
+                        bannerImage: TOP_RESTAURANT_CHAIN_IMAGES[r.name] || r.bannerImage,
+                    }));
+                    setAllRestaurants(mappedAll);
                 }
             } catch {
                 toast.error("Could not load restaurant details");
@@ -176,6 +213,7 @@ const RestaurantDetailsPage = () => {
             }
         };
         fetchDetails();
+        window.scrollTo({ top: 0, behavior: "smooth" });
     }, [id]);
 
     const handleBookTableSubmit = (e) => {
@@ -401,8 +439,8 @@ const RestaurantDetailsPage = () => {
                         type="button"
                         onClick={() => setActiveSectionTab("all")}
                         className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-colors cursor-pointer ${activeSectionTab === "all"
-                                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                             }`}
                     >
                         Menu & Book Table
@@ -411,8 +449,8 @@ const RestaurantDetailsPage = () => {
                         type="button"
                         onClick={() => setActiveSectionTab("menu")}
                         className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer ${activeSectionTab === "menu"
-                                ? "bg-orange-500 text-white shadow-sm"
-                                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            ? "bg-orange-500 text-white shadow-sm"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                             }`}
                     >
                         <UtensilsCrossed className="w-3.5 h-3.5" />
@@ -422,12 +460,23 @@ const RestaurantDetailsPage = () => {
                         type="button"
                         onClick={() => setActiveSectionTab("book")}
                         className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer ${activeSectionTab === "book"
-                                ? "bg-orange-500 text-white shadow-sm"
-                                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            ? "bg-orange-500 text-white shadow-sm"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                             }`}
                     >
                         <Calendar className="w-3.5 h-3.5" />
                         <span>Book a Table (Dine-In)</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveSectionTab("restaurants")}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer ${activeSectionTab === "restaurants"
+                            ? "bg-orange-500 text-white shadow-sm"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            }`}
+                    >
+                        <Store className="w-3.5 h-3.5" />
+                        <span>All Restaurants ({allRestaurants.length})</span>
                     </button>
                 </div>
 
@@ -513,18 +562,6 @@ const RestaurantDetailsPage = () => {
                                 </select>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">
-                                    Special Occasion / Note
-                                </label>
-                                <input
-                                    type="text"
-                                    value={specialRequest}
-                                    onChange={(e) => setSpecialRequest(e.target.value)}
-                                    placeholder="e.g. Birthday, High chair..."
-                                    className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                />
-                            </div>
                         </div>
 
                         {/* Time Slot Pills */}
@@ -539,8 +576,8 @@ const RestaurantDetailsPage = () => {
                                         type="button"
                                         onClick={() => setBookingTime(slot)}
                                         className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${bookingTime === slot
-                                                ? "bg-orange-500 border-orange-500 text-white shadow-sm"
-                                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-orange-400"
+                                            ? "bg-orange-500 border-orange-500 text-white shadow-sm"
+                                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-orange-400"
                                             }`}
                                     >
                                         {slot}
@@ -640,8 +677,8 @@ const RestaurantDetailsPage = () => {
                                     key={cat}
                                     onClick={() => setSelectedCategory(cat)}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${selectedCategory === cat
-                                            ? "bg-orange-500 text-white"
-                                            : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
+                                        ? "bg-orange-500 text-white"
+                                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
                                         }`}
                                 >
                                     {cat}
@@ -664,8 +701,8 @@ const RestaurantDetailsPage = () => {
                             <button
                                 onClick={() => setVegOnlyFilter((v) => !v)}
                                 className={`px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 cursor-pointer ${vegOnlyFilter
-                                        ? "bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                                    ? "bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                                     }`}
                             >
                                 <Leaf className="w-3.5 h-3.5 text-emerald-600" />
@@ -782,6 +819,32 @@ const RestaurantDetailsPage = () => {
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            )}
+
+            {/* All Restaurants Section */}
+            {allRestaurants.length > 0 && (
+                <div className="mt-12 pt-10 border-t border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                            <Store className="w-6 h-6 text-orange-500" />
+                            <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                                All Restaurants in Bengaluru ({allRestaurants.length})
+                            </h2>
+                        </div>
+                        <Link
+                            to="/restaurants"
+                            className="text-xs font-bold text-orange-500 hover:underline"
+                        >
+                            View Full Directory →
+                        </Link>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {allRestaurants.map((rest) => (
+                            <RestaurantCard key={rest._id} restaurant={rest} />
+                        ))}
                     </div>
                 </div>
             )}

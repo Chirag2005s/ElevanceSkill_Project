@@ -17,6 +17,9 @@ import {
     CheckCheck,
     Menu,
     X,
+    ChevronDown,
+    Navigation,
+    Check,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../services/api";
@@ -28,6 +31,65 @@ import {
     markAllReadLocal,
     toggleTheme,
 } from "../store/store";
+
+const POPULAR_LOCATIONS = [
+    {
+        label: "Indiranagar",
+        street: "100 Feet Road, Indiranagar, Bengaluru",
+        pincode: "560038",
+        lat: 12.9784,
+        lng: 77.6408,
+    },
+    {
+        label: "Koramangala",
+        street: "5th Block, Koramangala, Bengaluru",
+        pincode: "560095",
+        lat: 12.9352,
+        lng: 77.6245,
+    },
+    {
+        label: "HSR Layout",
+        street: "27th Main Road, Sector 1, HSR Layout",
+        pincode: "560102",
+        lat: 12.9166,
+        lng: 77.6481,
+    },
+    {
+        label: "MG Road",
+        street: "Church Street, MG Road, Bengaluru",
+        pincode: "560001",
+        lat: 12.9746,
+        lng: 77.6069,
+    },
+    {
+        label: "Basavanagudi",
+        street: "Gandhi Bazaar Main Road, Basavanagudi",
+        pincode: "560004",
+        lat: 12.9448,
+        lng: 77.5713,
+    },
+    {
+        label: "Whitefield",
+        street: "ITPL Main Road, Whitefield, Bengaluru",
+        pincode: "560066",
+        lat: 12.9698,
+        lng: 77.7499,
+    },
+    {
+        label: "Jayanagar",
+        street: "4th Block, Jayanagar, Bengaluru",
+        pincode: "560011",
+        lat: 12.925,
+        lng: 77.5938,
+    },
+    {
+        label: "BTM Layout",
+        street: "2nd Stage, BTM Layout, Bengaluru",
+        pincode: "560076",
+        lat: 12.9166,
+        lng: 77.6101,
+    },
+];
 
 const Navbar = () => {
     const dispatch = useDispatch();
@@ -44,8 +106,111 @@ const Navbar = () => {
     const { mode: themeMode } = useSelector((state) => state.theme);
 
     const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+    const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+    const [locationSearch, setLocationSearch] = useState("");
+    const [detectingGps, setDetectingGps] = useState(false);
+    const [selectedLocation, setSelectedLocation] = useState(() => {
+        try {
+            const saved = localStorage.getItem("zingbite_selected_location");
+            if (saved) return JSON.parse(saved);
+        } catch {
+            // ignore
+        }
+        return null;
+    });
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const notifRef = useRef(null);
+    const locationRef = useRef(null);
+
+    const activeLocationLabel =
+        selectedLocation?.label || user?.savedAddresses?.[0]?.label || "Indiranagar";
+    const activeLocationStreet =
+        selectedLocation?.street ||
+        user?.savedAddresses?.[0]?.street ||
+        "100 Feet Road, Bengaluru";
+
+    const applyLocationSelection = (locObj) => {
+        setSelectedLocation(locObj);
+        try {
+            localStorage.setItem("zingbite_selected_location", JSON.stringify(locObj));
+        } catch {
+            // ignore
+        }
+        if (isAuthenticated && user) {
+            const existingAddresses = user.savedAddresses || [];
+            const updatedAddresses = [
+                {
+                    label: locObj.label || "Home",
+                    street: locObj.street || `${locObj.label}, Bengaluru`,
+                    city: "Bengaluru",
+                    state: "Karnataka",
+                    pincode: locObj.pincode || "560001",
+                    isDefault: true,
+                },
+                ...existingAddresses.filter((a) => a.street !== locObj.street),
+            ];
+            dispatch(updateUserState({ savedAddresses: updatedAddresses }));
+        }
+        setShowLocationDropdown(false);
+        setLocationSearch("");
+        toast.success(`Delivery location set to ${locObj.label}`);
+    };
+
+    const handleCustomLocationSubmit = (e) => {
+        e.preventDefault();
+        const trimmed = locationSearch.trim();
+        if (!trimmed) return;
+        const parts = trimmed.split(",");
+        const label = parts[0].trim();
+        const street = parts.length > 1 ? trimmed : `${trimmed}, Bengaluru, Karnataka`;
+        applyLocationSelection({
+            label,
+            street,
+            pincode: "560001",
+        });
+    };
+
+    const handleDetectCurrentGps = () => {
+        setDetectingGps(true);
+        if (!navigator.geolocation) {
+            setDetectingGps(false);
+            applyLocationSelection(POPULAR_LOCATIONS[0]);
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const { latitude, longitude } = pos.coords;
+                // Find closest Bengaluru hub or show GPS coordinates
+                let closest = POPULAR_LOCATIONS[0];
+                let minDist = Infinity;
+                for (const loc of POPULAR_LOCATIONS) {
+                    const d = Math.hypot(loc.lat - latitude, loc.lng - longitude);
+                    if (d < minDist) {
+                        minDist = d;
+                        closest = loc;
+                    }
+                }
+                setDetectingGps(false);
+                applyLocationSelection({
+                    label: `${closest.label} (GPS)`,
+                    street: `${closest.street} (${latitude.toFixed(3)}, ${longitude.toFixed(3)})`,
+                    pincode: closest.pincode,
+                    lat: latitude,
+                    lng: longitude,
+                });
+            },
+            () => {
+                setDetectingGps(false);
+                applyLocationSelection({
+                    label: "Indiranagar (Live GPS)",
+                    street: "100 Feet Road, Indiranagar, Bengaluru",
+                    pincode: "560038",
+                });
+            },
+            { timeout: 6000 }
+        );
+    };
 
     const totalCartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -95,6 +260,9 @@ const Navbar = () => {
             if (notifRef.current && !notifRef.current.contains(e.target)) {
                 setShowNotifDropdown(false);
             }
+            if (locationRef.current && !locationRef.current.contains(e.target)) {
+                setShowLocationDropdown(false);
+            }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -124,7 +292,7 @@ const Navbar = () => {
     const getDashboardLink = () => {
         if (!user) return null;
         if (user.role === "admin")
-            return { to: "/admin", label: "Admin Console" };
+            return { to: "/admin", label: "Admin" };
         if (user.role === "restaurant")
             return { to: "/restaurant-dashboard", label: "Restaurant Hub" };
         if (user.role === "delivery")
@@ -147,38 +315,193 @@ const Navbar = () => {
                             <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
                                 Zing<span className="text-orange-500">Bite</span>
                             </span>
-                            <span className="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-1">
+                            {/* <span className="block text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-1">
                                 Express Delivery
-                            </span>
+                            </span> */}
                         </div>
                     </Link>
 
-                    <Link
-                        to="/restaurants"
-                        className="hidden md:flex items-center gap-2 pl-4 border-l border-slate-200 dark:border-slate-800 text-sm hover:text-orange-500 transition-colors"
-                    >
-                        <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
-                        <div className="truncate max-w-[200px]">
-                            <span className="font-bold text-slate-800 dark:text-slate-100 border-b-2 border-orange-500 pb-0.5">
-                                {user?.savedAddresses?.[0]?.label || "Indiranagar"}
-                            </span>
-                            <span className="text-slate-500 dark:text-slate-400 text-xs ml-1.5">
-                                {user?.savedAddresses?.[0]?.street || "Bengaluru, Karnataka"}
-                            </span>
-                        </div>
-                    </Link>
+                    {/* Interactive Location Selector */}
+                    <div className="relative" ref={locationRef}>
+                        <button
+                            type="button"
+                            onClick={() => setShowLocationDropdown((prev) => !prev)}
+                            className="flex items-center gap-2 pl-3 sm:pl-4 border-l border-slate-200 dark:border-slate-800 text-sm hover:text-orange-500 transition-colors cursor-pointer text-left"
+                        >
+                            <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
+                            <div className="truncate max-w-[140px] sm:max-w-[220px]">
+                                <span className="font-bold text-slate-800 dark:text-slate-100 border-b-2 border-orange-500 pb-0.5">
+                                    {activeLocationLabel}
+                                </span>
+                                <span className="hidden sm:inline text-slate-500 dark:text-slate-400 text-xs ml-1.5">
+                                    {activeLocationStreet}
+                                </span>
+                            </div>
+                            <ChevronDown
+                                className={`w-4 h-4 text-orange-500 shrink-0 transition-transform ${showLocationDropdown ? "rotate-180" : ""
+                                    }`}
+                            />
+                        </button>
+
+                        {showLocationDropdown && (
+                            <div className="absolute left-0 mt-3 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                                            Select Delivery Location
+                                        </h4>
+                                        <p className="text-[11px] text-slate-500">
+                                            Choose your area for accurate delivery time & fees
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowLocationDropdown(false)}
+                                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                {/* Detect Current GPS Button */}
+                                <button
+                                    type="button"
+                                    onClick={handleDetectCurrentGps}
+                                    disabled={detectingGps}
+                                    className="w-full p-3 rounded-xl bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800/60 text-orange-600 dark:text-orange-400 hover:bg-orange-100 transition-colors flex items-center gap-2.5 text-xs font-extrabold cursor-pointer"
+                                >
+                                    <Navigation
+                                        className={`w-4 h-4 shrink-0 ${detectingGps ? "animate-spin" : ""
+                                            }`}
+                                    />
+                                    <span>
+                                        {detectingGps
+                                            ? "Detecting your GPS location..."
+                                            : "Use My Current GPS Location"}
+                                    </span>
+                                </button>
+
+                                {/* Custom Area / Street Input */}
+                                <form onSubmit={handleCustomLocationSubmit} className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={locationSearch}
+                                        onChange={(e) => setLocationSearch(e.target.value)}
+                                        placeholder="Enter area, street or pincode..."
+                                        className="flex-1 px-3 py-2 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                    />
+                                    <button
+                                        type="submit"
+                                        className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold cursor-pointer shrink-0"
+                                    >
+                                        Set
+                                    </button>
+                                </form>
+
+                                {/* Saved User Addresses */}
+                                {isAuthenticated &&
+                                    Array.isArray(user?.savedAddresses) &&
+                                    user.savedAddresses.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                                                Saved Addresses
+                                            </span>
+                                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                                {user.savedAddresses.map((addr, idx) => {
+                                                    const isSelected =
+                                                        activeLocationStreet === addr.street;
+                                                    return (
+                                                        <button
+                                                            key={addr._id || idx}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                applyLocationSelection({
+                                                                    label: addr.label || "Saved",
+                                                                    street: addr.street,
+                                                                    pincode: addr.pincode,
+                                                                })
+                                                            }
+                                                            className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${isSelected
+                                                                ? "bg-orange-50/70 border-orange-400 dark:bg-orange-950/30"
+                                                                : "border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                                }`}
+                                                        >
+                                                            <div className="truncate">
+                                                                <span className="text-xs font-bold block text-slate-800 dark:text-slate-100">
+                                                                    {addr.label}
+                                                                </span>
+                                                                <span className="text-[11px] text-slate-500 truncate block">
+                                                                    {addr.street}
+                                                                </span>
+                                                            </div>
+                                                            {isSelected && (
+                                                                <Check className="w-4 h-4 text-orange-500 shrink-0" />
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                {/* Popular Bengaluru Hubs */}
+                                <div className="space-y-1.5">
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                                        Popular Delivery Hubs in Bengaluru
+                                    </span>
+                                    <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+                                        {POPULAR_LOCATIONS.filter(
+                                            (loc) =>
+                                                !locationSearch.trim() ||
+                                                loc.label
+                                                    .toLowerCase()
+                                                    .includes(locationSearch.toLowerCase()) ||
+                                                loc.street
+                                                    .toLowerCase()
+                                                    .includes(locationSearch.toLowerCase())
+                                        ).map((loc) => {
+                                            const isSelected = activeLocationLabel === loc.label;
+                                            return (
+                                                <button
+                                                    key={loc.label}
+                                                    type="button"
+                                                    onClick={() => applyLocationSelection(loc)}
+                                                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${isSelected
+                                                        ? "bg-orange-500 text-white border-orange-500 shadow-2xs"
+                                                        : "bg-slate-50 dark:bg-slate-800/70 border-slate-200/70 dark:border-slate-700 hover:border-orange-400 text-slate-700 dark:text-slate-200"
+                                                        }`}
+                                                >
+                                                    <div className="text-xs font-bold truncate">
+                                                        {loc.label}
+                                                    </div>
+                                                    <div
+                                                        className={`text-[10px] truncate ${isSelected
+                                                            ? "text-orange-100"
+                                                            : "text-slate-400"
+                                                            }`}
+                                                    >
+                                                        {loc.pincode}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Desktop Navigation Links */}
                 <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    <Link
+                    {/* <Link
                         to="/search"
                         className={`flex items-center gap-2 hover:text-orange-500 transition-colors ${location.pathname === "/search" ? "text-orange-500" : ""
                             }`}
                     >
                         <Search className="w-4 h-4" />
                         <span>Search</span>
-                    </Link>
+                    </Link> */}
 
                     <Link
                         to="/restaurants"
@@ -188,26 +511,24 @@ const Navbar = () => {
                         Restaurants
                     </Link>
 
-                    {isAuthenticated && (
-                        <>
-                            <Link
-                                to="/my-orders"
-                                className={`flex items-center gap-1.5 hover:text-orange-500 transition-colors ${location.pathname === "/my-orders" ? "text-orange-500" : ""
-                                    }`}
-                            >
-                                <Package className="w-4 h-4" />
-                                <span>Orders</span>
-                            </Link>
+                    <Link
+                        to="/wishlist"
+                        className={`flex items-center gap-1.5 hover:text-orange-500 transition-colors ${location.pathname === "/wishlist" ? "text-orange-500" : ""
+                            }`}
+                    >
+                        <Heart className="w-4 h-4" />
+                        <span>Wishlist</span>
+                    </Link>
 
-                            <Link
-                                to="/wishlist"
-                                className={`flex items-center gap-1.5 hover:text-orange-500 transition-colors ${location.pathname === "/wishlist" ? "text-orange-500" : ""
-                                    }`}
-                            >
-                                <Heart className="w-4 h-4" />
-                                <span>Wishlist</span>
-                            </Link>
-                        </>
+                    {isAuthenticated && (
+                        <Link
+                            to="/my-orders"
+                            className={`flex items-center gap-1.5 hover:text-orange-500 transition-colors ${location.pathname === "/my-orders" ? "text-orange-500" : ""
+                                }`}
+                        >
+                            <Package className="w-4 h-4" />
+                            <span>Orders</span>
+                        </Link>
                     )}
 
                     {dashboardInfo && (
@@ -287,8 +608,8 @@ const Navbar = () => {
                                                         }
                                                     }}
                                                     className={`p-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${!n.isRead
-                                                            ? "bg-orange-50/40 dark:bg-orange-950/20"
-                                                            : ""
+                                                        ? "bg-orange-50/40 dark:bg-orange-950/20"
+                                                        : ""
                                                         }`}
                                                 >
                                                     <div className="flex items-center justify-between gap-2">
@@ -384,23 +705,21 @@ const Navbar = () => {
                     >
                         All Restaurants
                     </Link>
+                    <Link
+                        to="/wishlist"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="py-2 hover:text-orange-500"
+                    >
+                        My Wishlist
+                    </Link>
                     {isAuthenticated && (
-                        <>
-                            <Link
-                                to="/my-orders"
-                                onClick={() => setMobileMenuOpen(false)}
-                                className="py-2 hover:text-orange-500"
-                            >
-                                My Orders
-                            </Link>
-                            <Link
-                                to="/wishlist"
-                                onClick={() => setMobileMenuOpen(false)}
-                                className="py-2 hover:text-orange-500"
-                            >
-                                My Wishlist
-                            </Link>
-                        </>
+                        <Link
+                            to="/my-orders"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="py-2 hover:text-orange-500"
+                        >
+                            My Orders
+                        </Link>
                     )}
                     {dashboardInfo && (
                         <Link
