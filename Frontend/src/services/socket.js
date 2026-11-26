@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:4000";
+const SOCKET_URL =
+    import.meta.env.VITE_SOCKET_URL || "https://elevanceskill-project.onrender.com";
 
 let socket = null;
 

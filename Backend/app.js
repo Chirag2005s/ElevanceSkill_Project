@@ -56,13 +56,27 @@ app.use(
 );
 
 // CORS Configuration
+const allowedOrigins = [
+    process.env.CLIENT_URL || "http://localhost:5173",
+    "https://elevance-skill-project-two.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+];
+
 app.use(
     cors({
-        origin: [
-            process.env.CLIENT_URL || "http://localhost:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5173",
-        ],
+        origin: (origin, callback) => {
+            if (
+                !origin ||
+                allowedOrigins.includes(origin) ||
+                origin.endsWith(".vercel.app") ||
+                origin.endsWith(".onrender.com")
+            ) {
+                return callback(null, true);
+            }
+            return callback(null, true);
+        },
         credentials: true,
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     })
