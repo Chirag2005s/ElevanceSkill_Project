@@ -1,8 +1,28 @@
+const Module = require("module");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
+
+// Case-insensitive local module resolver for Linux deployments (Middleware / Models / Routes)
+const originalResolveFilename = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+    try {
+        return originalResolveFilename.call(this, request, parent, isMain, options);
+    } catch (err) {
+        if (err && err.code === "MODULE_NOT_FOUND" && typeof request === "string" && request.startsWith(".")) {
+            const mappedRequest = request
+                .replace(/\/middleware\//gi, "/Middleware/")
+                .replace(/\/models\//gi, "/Models/")
+                .replace(/\/routes\//gi, "/Routes/");
+            if (mappedRequest !== request) {
+                return originalResolveFilename.call(this, mappedRequest, parent, isMain, options);
+            }
+        }
+        throw err;
+    }
+};
 
 const { apiLimiter } = require("./middleware/rateLimit.middleware");
 const { sanitizeInputs } = require("./middleware/validation.middleware");
